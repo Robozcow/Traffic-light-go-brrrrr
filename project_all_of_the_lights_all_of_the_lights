@@ -1,0 +1,101 @@
+/* Project 5 Part B - Controlling Traffic 
+by Micah Waddell */
+
+#include <Arduino.h>  // include Arduino library for built-in functions like pinMode, digitalWrite, etc.
+
+#define westButton 3  // define pin numbers for buttons and traffic lights
+#define eastButton 13
+#define westRed 2
+#define westYellow 1
+#define westGreen 0
+#define eastRed 12
+#define eastYellow 11
+#define eastGreen 10
+
+// timing constants
+#define yellowBlinkTime 500  // duration of one blink
+#define flowTime 10000       // time allowed for current direction to flow
+#define changeDelay 2000     // delay between light changes
+
+// track current traffic direction (true = west-to-east, false = east-to-west)
+bool trafficWest = true;
+
+// function Prototypes
+void blinkYellow(int pin);                                      // blink a yellow light to indicate change
+void setTrafficLightsGreen(int redPin, int greenPin);           // set red light off and green light on
+void transitionToRed(int greenPin, int yellowPin, int redPin);  // handle safe light change from green to red
+
+void setup() {
+  // configure button pins as inputs
+  pinMode(westButton, INPUT);
+  pinMode(eastButton, INPUT);
+
+  // configure light pins as outputs
+  pinMode(westRed, OUTPUT);
+  pinMode(westYellow, OUTPUT);
+  pinMode(westGreen, OUTPUT);
+  pinMode(eastRed, OUTPUT);
+  pinMode(eastYellow, OUTPUT);
+  pinMode(eastGreen, OUTPUT);
+
+  // set initial light state: west direction gets green light, east is red
+  digitalWrite(westRed, LOW);
+  digitalWrite(westYellow, LOW);
+  digitalWrite(westGreen, HIGH);
+  digitalWrite(eastRed, HIGH);
+  digitalWrite(eastYellow, LOW);
+  digitalWrite(eastGreen, LOW);
+}
+
+void loop() {
+  // check if west button is pressed
+  if (digitalRead(westButton) == HIGH) {
+    if (!trafficWest) {    // if traffic is currently flowing east, switch to west
+      trafficWest = true;  // update direction state
+      delay(flowTime);     // let current east-to-west flow finish
+
+      transitionToRed(eastGreen, eastYellow, eastRed);  // stop east traffic
+      blinkYellow(westYellow);                          // blink west yellow light
+      setTrafficLightsGreen(westRed, westGreen);        // allow west traffic
+    }
+  }
+
+  // check if east button is pressed
+  if (digitalRead(eastButton) == HIGH) {
+    if (trafficWest) {      // if traffic is currently flowing west, switch to east
+      trafficWest = false;  // update direction state
+      delay(flowTime);      // let current west-to-east flow finish
+
+      transitionToRed(westGreen, westYellow, westRed);  // stop west traffic
+      blinkYellow(eastYellow);                          // blink east yellow light
+      setTrafficLightsGreen(eastRed, eastGreen);        // allow east traffic
+    }
+  }
+}
+
+// blink the yellow light at the given pin 5 times
+void blinkYellow(int pin) {
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(pin, LOW);
+    delay(yellowBlinkTime);
+    digitalWrite(pin, HIGH);
+    delay(yellowBlinkTime);
+  }
+  digitalWrite(pin, LOW);  // ensure yellow is off at the end
+}
+
+// turn the red light OFF and green light ON for a direction
+void setTrafficLightsGreen(int redPin, int greenPin) {
+  digitalWrite(redPin, LOW);
+  digitalWrite(greenPin, HIGH);
+}
+
+// safely switch a light from green → yellow → red
+void transitionToRed(int greenPin, int yellowPin, int redPin) {
+  digitalWrite(greenPin, LOW);
+  digitalWrite(yellowPin, HIGH);
+  delay(changeDelay);
+  digitalWrite(yellowPin, LOW);
+  digitalWrite(redPin, HIGH);
+  delay(changeDelay);
+}
