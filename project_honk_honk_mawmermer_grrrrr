@@ -1,0 +1,131 @@
+/* Project 5 Part C - Controlling Traffic 
+by: Micah Waddell */
+
+#include <Arduino.h>  // Arduino library for functions
+
+#define WEST_BUTTON 3  //define pins
+#define EAST_BUTTON 13
+#define PED_BUTTON 4
+#define PED_LIGHT 5
+
+#define WEST_RED 2
+#define WEST_YELLOW 1
+#define WEST_GREEN 0
+#define EAST_RED 12
+#define EAST_YELLOW 11
+#define EAST_GREEN 10
+
+// timing constants
+#define YELLOW_BLINK_TIME 500  // duraction of one blink
+#define FLOW_TIME 10000        // time for direction to flow
+#define CHANGE_DELAY 2000      // delay between light changes
+#define PED_CROSS_TIME 8000    // time for how long a pedestrian has to cross
+
+// track current traffic direction (true = west-to-east, false = east-to-west)
+int trafficWest = 1;
+
+// function Prototypes
+void blinkYellow(int pin);                              // blink a yellow light to indicate change
+void setGreen(int redPin, int greenPin);                // set red light off and green light on
+void goToRed(int greenPin, int yellowPin, int redPin);  // handle safe light change from green to red
+void handlePedestrian();
+
+void setup() {
+  // configure button pins as inputs
+  pinMode(WEST_BUTTON, INPUT);
+  pinMode(EAST_BUTTON, INPUT);
+  pinMode(PED_BUTTON, INPUT);
+
+  // configure light pins as outputs
+  pinMode(PED_LIGHT, OUTPUT);
+  pinMode(WEST_RED, OUTPUT);
+  pinMode(WEST_YELLOW, OUTPUT);
+  pinMode(WEST_GREEN, OUTPUT);
+  pinMode(EAST_RED, OUTPUT);
+  pinMode(EAST_YELLOW, OUTPUT);
+  pinMode(EAST_GREEN, OUTPUT);
+
+  // set initial light state: west direction gets green light, east is red
+  digitalWrite(WEST_RED, LOW);
+  digitalWrite(WEST_YELLOW, LOW);
+  digitalWrite(WEST_GREEN, HIGH);
+
+  digitalWrite(EAST_RED, HIGH);
+  digitalWrite(EAST_YELLOW, LOW);
+  digitalWrite(EAST_GREEN, LOW);
+
+  digitalWrite(PED_LIGHT, LOW);
+}
+
+void loop() {
+  // if west button is pressed and east traffic is currently active
+  if (digitalRead(WEST_BUTTON) == HIGH && trafficWest == 0) {
+    trafficWest = 1;                             // change direction to west
+    delay(FLOW_TIME);                            // wait for current traffic to finish
+    goToRed(EAST_GREEN, EAST_YELLOW, EAST_RED);  // stop east traffic
+    blinkYellow(WEST_YELLOW);                    // indicate change with blinking yellow
+    setGreen(WEST_RED, WEST_GREEN);              // let west traffic flow
+  }
+
+  // if east button is pressed and west traffic is currently active
+  if (digitalRead(EAST_BUTTON) == HIGH && trafficWest == 1) {
+    trafficWest = 0;                             // change direction to east
+    delay(FLOW_TIME);                            // wait for current traffic to finish
+    goToRed(WEST_GREEN, WEST_YELLOW, WEST_RED);  // stop west traffic
+    blinkYellow(EAST_YELLOW);                    // indicate change with blinking yellow
+    setGreen(EAST_RED, EAST_GREEN);              // let east traffic flow
+  }
+
+  // if pedestrian button is pressed
+  if (digitalRead(PED_BUTTON) == HIGH) {
+    handlePedestrian();  // stop traffic and allow crossing
+  }
+}
+
+void blinkYellow(int pin) {
+  int i;
+  for (i = 0; i < 5; i++) {  // blink the yellow light 5 times
+    digitalWrite(pin, LOW);  // turn off yellow
+    delay(YELLOW_BLINK_TIME);
+    digitalWrite(pin, HIGH);  // turn on yellow
+    delay(YELLOW_BLINK_TIME);
+  }
+  digitalWrite(pin, LOW);  // make sure that yello is off
+}
+
+
+// set red light OFF and green light ON for a traffic direction
+void setGreen(int redPin, int greenPin) {
+  digitalWrite(redPin, LOW);     // turn off red
+  digitalWrite(greenPin, HIGH);  // turn on green
+}
+
+// safely switch from green to yellow to red
+void goToRed(int greenPin, int yellowPin, int redPin) {
+  digitalWrite(greenPin, LOW);    // turn off green
+  digitalWrite(yellowPin, HIGH);  // turn on yellow
+  delay(CHANGE_DELAY);
+  digitalWrite(yellowPin, LOW);  // turn off yellow
+  digitalWrite(redPin, HIGH);    // turn on red
+  delay(CHANGE_DELAY);
+}
+
+void handlePedestrian() {
+  // stop traffic in both directions
+  goToRed(WEST_GREEN, WEST_YELLOW, WEST_RED);
+  goToRed(EAST_GREEN, EAST_YELLOW, EAST_RED);
+
+  // Pedestrian crosses
+  digitalWrite(PED_LIGHT, HIGH);  // turn on pedestrian light
+  delay(PED_CROSS_TIME);          // wait while pedestrian crosses
+  digitalWrite(PED_LIGHT, LOW);   // turn off pedestrian light
+
+  // Resume previous traffic direction
+  if (trafficWest == 1) {
+    blinkYellow(WEST_YELLOW);  // indicate west traffic resuming
+    setGreen(WEST_RED, WEST_GREEN);
+  } else {
+    blinkYellow(EAST_YELLOW);  // indicate east traffic resuming
+    setGreen(EAST_RED, EAST_GREEN);
+  }
+}
