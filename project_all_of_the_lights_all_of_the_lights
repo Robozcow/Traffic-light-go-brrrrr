@@ -4,7 +4,7 @@ by Micah Waddell */
 #include <Arduino.h>  // include Arduino library for built-in functions like pinMode, digitalWrite, etc.
 
 #define westButton 3  // define pin numbers for buttons and traffic lights
-#define eastButton 13
+#define eastButton 13 
 #define westRed 2
 #define westYellow 1
 #define westGreen 0
