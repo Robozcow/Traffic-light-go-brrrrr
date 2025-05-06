@@ -1,0 +1,204 @@
+/* Project 5 Part C - Controlling Traffic with Emergency Override
+   by: Micah Waddell, Modified for Emergency RF Override */
+
+#include <Arduino.h>
+
+// Button Inputs
+#define WEST_BUTTON 3
+#define EAST_BUTTON 13
+#define PED_BUTTON 4
+#define EMERGENCY_OVERRIDE_PIN 6  // RF Receiver input
+
+// Pedestrian Output
+#define PED_LIGHT 5
+
+// West Traffic Lights
+#define WEST_RED 2
+#define WEST_YELLOW 1
+#define WEST_GREEN 0
+
+// East Traffic Lights
+#define EAST_RED 12
+#define EAST_YELLOW 11
+#define EAST_GREEN 10
+
+// Timing Constants
+#define YELLOW_BLINK_TIME 250
+#define FLOW_TIME 1000
+#define CHANGE_DELAY 1500
+#define PED_CROSS_TIME 8000
+#define EMERGENCY_TIME 5000  // Emergency duration
+
+// State Tracking
+int trafficWest = 1;                  // true = west-to-east, false = east-to-west
+int lastPedButtonState = LOW;
+bool emergencyActive = false;
+unsigned long emergencyStartTime = 0;
+bool wasWestGreenBeforeEmergency = false;
+bool wasEastGreenBeforeEmergency = false;
+
+// Function Prototypes
+void blinkYellow(int pin);
+void setGreen(int redPin, int greenPin);
+void goToRed(int greenPin, int yellowPin, int redPin, bool blink);
+void handlePedestrian();
+
+void setup() {
+  pinMode(WEST_BUTTON, INPUT);
+  pinMode(EAST_BUTTON, INPUT);
+  pinMode(PED_BUTTON, INPUT);
+  pinMode(EMERGENCY_OVERRIDE_PIN, INPUT);
+
+  pinMode(PED_LIGHT, OUTPUT);
+  pinMode(WEST_RED, OUTPUT);
+  pinMode(WEST_YELLOW, OUTPUT);
+  pinMode(WEST_GREEN, OUTPUT);
+  pinMode(EAST_RED, OUTPUT);
+  pinMode(EAST_YELLOW, OUTPUT);
+  pinMode(EAST_GREEN, OUTPUT);
+
+  // Initial light state: west green, east red
+  digitalWrite(WEST_RED, LOW);
+  digitalWrite(WEST_YELLOW, LOW);
+  digitalWrite(WEST_GREEN, HIGH);
+
+  digitalWrite(EAST_RED, HIGH);
+  digitalWrite(EAST_YELLOW, LOW);
+  digitalWrite(EAST_GREEN, LOW);
+
+  digitalWrite(PED_LIGHT, LOW);
+}
+
+void loop() {
+  static unsigned long lastSwitchTime = millis();
+  static bool inPedestrianMode = false;
+
+  // --- Emergency RF Override ---
+  if (!emergencyActive && digitalRead(EMERGENCY_OVERRIDE_PIN) == HIGH) {
+    emergencyActive = true;
+    emergencyStartTime = millis();
+
+    // Save current traffic light state
+    wasWestGreenBeforeEmergency = digitalRead(WEST_GREEN) == HIGH;
+    wasEastGreenBeforeEmergency = digitalRead(EAST_GREEN) == HIGH;
+
+    // Turn off all lights
+    digitalWrite(WEST_GREEN, LOW);
+    digitalWrite(WEST_YELLOW, LOW);
+    digitalWrite(WEST_RED, LOW);
+    digitalWrite(EAST_GREEN, LOW);
+    digitalWrite(EAST_YELLOW, LOW);
+    digitalWrite(EAST_RED, LOW);
+
+    // Force both directions green
+    digitalWrite(WEST_GREEN, HIGH);
+    digitalWrite(EAST_GREEN, HIGH);
+  }
+
+  // --- Emergency Duration Handling ---
+  if (emergencyActive && millis() - emergencyStartTime >= EMERGENCY_TIME) {
+    // Turn off emergency greens
+    digitalWrite(WEST_GREEN, LOW);
+    digitalWrite(EAST_GREEN, LOW);
+
+    // Restore previous state
+    if (wasWestGreenBeforeEmergency) {
+      setGreen(WEST_RED, WEST_GREEN);
+      digitalWrite(EAST_RED, HIGH);
+      trafficWest = 1;
+    } else if (wasEastGreenBeforeEmergency) {
+      setGreen(EAST_RED, EAST_GREEN);
+      digitalWrite(WEST_RED, HIGH);
+      trafficWest = 0;
+    } else {
+      // Default if both were red
+      setGreen(WEST_RED, WEST_GREEN);
+      digitalWrite(EAST_RED, HIGH);
+      trafficWest = 1;
+    }
+
+    emergencyActive = false;
+    lastSwitchTime = millis();  // Reset timer after emergency
+  }
+
+  // Skip normal operation during emergency
+  if (emergencyActive) return;
+
+  // --- Pedestrian Button Edge Detection ---
+  int currentPedButtonState = digitalRead(PED_BUTTON);
+  if (currentPedButtonState == HIGH && lastPedButtonState == LOW && !inPedestrianMode) {
+    inPedestrianMode = true;
+    handlePedestrian();
+    inPedestrianMode = false;
+    lastSwitchTime = millis();  // reset timer
+  }
+  lastPedButtonState = currentPedButtonState;
+
+  // --- Normal Automatic Traffic Flow ---
+  if (millis() - lastSwitchTime > FLOW_TIME) {
+    if (trafficWest) {
+      trafficWest = 0;
+      goToRed(WEST_GREEN, WEST_YELLOW, WEST_RED, true);
+      setGreen(EAST_RED, EAST_GREEN);
+    } else {
+      trafficWest = 1;
+      goToRed(EAST_GREEN, EAST_YELLOW, EAST_RED, false);
+      setGreen(WEST_RED, WEST_GREEN);
+    }
+    lastSwitchTime = millis();
+  }
+}
+
+void blinkYellow(int pin) {
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(pin, LOW);
+    delay(YELLOW_BLINK_TIME);
+    digitalWrite(pin, HIGH);
+    delay(YELLOW_BLINK_TIME);
+  }
+  digitalWrite(pin, LOW);
+}
+
+void setGreen(int redPin, int greenPin) {
+  digitalWrite(redPin, LOW);
+  digitalWrite(greenPin, HIGH);
+}
+
+void goToRed(int greenPin, int yellowPin, int redPin, bool blink) {
+  digitalWrite(greenPin, LOW);
+
+  if (blink) {
+    blinkYellow(yellowPin);
+  } else {
+    digitalWrite(yellowPin, HIGH);
+    delay(CHANGE_DELAY);
+    digitalWrite(yellowPin, LOW);
+  }
+
+  digitalWrite(redPin, HIGH);
+  delay(CHANGE_DELAY);
+}
+
+void handlePedestrian() {
+  // Save current light state
+  bool wasWestGreen = digitalRead(WEST_GREEN) == HIGH;
+  bool wasEastGreen = digitalRead(EAST_GREEN) == HIGH;
+
+  // Turn off greens
+  if (wasWestGreen) goToRed(WEST_GREEN, WEST_YELLOW, WEST_RED, true);
+  if (wasEastGreen) goToRed(EAST_GREEN, EAST_YELLOW, EAST_RED, false);
+
+  // Turn on pedestrian light
+  digitalWrite(PED_LIGHT, HIGH);
+  delay(PED_CROSS_TIME);
+  digitalWrite(PED_LIGHT, LOW);
+
+  // Restore traffic light state
+  if (wasWestGreen) {
+    setGreen(WEST_RED, WEST_GREEN);
+    trafficWest = 1;
+  } else if (wasEastGreen) {
+    setGreen(EAST_RED, EAST_GREEN);
+    trafficWest = 0;
+  }
+}
