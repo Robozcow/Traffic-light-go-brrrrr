@@ -1,4 +1,4 @@
-/* Project 5 Part C - Controlling Traffic with Emergency Override
+/* Project 5 Part D - Controlling Traffic with Emergency Override
    by: Micah Waddell, Modified for Emergency RF Override */
 
 #include <Arduino.h>
